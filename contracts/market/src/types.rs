@@ -75,27 +75,53 @@ pub struct WinningsClaimed {
     pub claimed_at: u64,
 }
 
-// ─── Conversions to shared event types ────────────────────────────────────────
-// The Market contract's enums are symbol-encoded while shared::types uses
-// integer discriminants, so values are converted explicitly before being
-// handed to shared::events.
+// ─── Conversions ──────────────────────────────────────────────────────────────
+// The Market contract stores a `SettledOutcome` (symbol-encoded, with a
+// `Pending` state), while `shared::types::Outcome` uses integer discriminants
+// including `Undetermined`. We implement `From` on the local `SettledOutcome`
+// to avoid the orphan rule (C-84).
 
-impl From<Outcome> for shared::types::Outcome {
-    fn from(outcome: Outcome) -> Self {
-        match outcome {
-            Outcome::FighterA => shared::types::Outcome::FighterA,
-            Outcome::FighterB => shared::types::Outcome::FighterB,
-            Outcome::Draw => shared::types::Outcome::Draw,
-            Outcome::NoContest => shared::types::Outcome::NoContest,
+impl From<shared::types::Outcome> for SettledOutcome {
+    fn from(o: shared::types::Outcome) -> Self {
+        match o {
+            shared::types::Outcome::FighterA => SettledOutcome::FighterA,
+            shared::types::Outcome::FighterB => SettledOutcome::FighterB,
+            shared::types::Outcome::Draw => SettledOutcome::Draw,
+            shared::types::Outcome::NoContest => SettledOutcome::NoContest,
+            shared::types::Outcome::Undetermined => SettledOutcome::Pending,
         }
     }
 }
 
-impl From<BetSide> for shared::types::BetSide {
-    fn from(side: BetSide) -> Self {
-        match side {
-            BetSide::FighterA => shared::types::BetSide::FighterA,
-            BetSide::FighterB => shared::types::BetSide::FighterB,
+impl SettledOutcome {
+    /// Returns the resolved shared outcome, panicking if the market is still
+    /// `Pending`. Use this wherever the contract logic has already established
+    /// that the market is resolved (C-85).
+    pub fn require_resolved(&self) -> shared::types::Outcome {
+        match self {
+            SettledOutcome::Pending => panic!("no outcome set"),
+            SettledOutcome::FighterA => shared::types::Outcome::FighterA,
+            SettledOutcome::FighterB => shared::types::Outcome::FighterB,
+            SettledOutcome::Draw => shared::types::Outcome::Draw,
+            SettledOutcome::NoContest => shared::types::Outcome::NoContest,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settled_outcome_round_trip() {
+        for (shared, settled) in [
+            (shared::types::Outcome::FighterA, SettledOutcome::FighterA),
+            (shared::types::Outcome::FighterB, SettledOutcome::FighterB),
+            (shared::types::Outcome::Draw, SettledOutcome::Draw),
+            (shared::types::Outcome::NoContest, SettledOutcome::NoContest),
+            (shared::types::Outcome::Undetermined, SettledOutcome::Pending),
+        ] {
+            assert_eq!(SettledOutcome::from(shared), settled);
         }
     }
 }
