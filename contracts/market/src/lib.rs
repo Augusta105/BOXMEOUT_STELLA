@@ -27,6 +27,11 @@ pub const MAX_BETS_PER_ADDRESS: u32 = 50;
 /// to claim. Once it elapses, `sweep_dust` may move rounding residue to fees.
 pub const CLAIM_WINDOW_SEC: u64 = 30 * 24 * 60 * 60;
 
+/// Maximum length in bytes of a dispute reason. Bounds persistent storage
+/// cost; a bettor cannot stuff an arbitrarily large blob into storage via the
+/// dispute flow (C-83).
+pub const MAX_DISPUTE_REASON_LEN: u32 = 512;
+
 #[contracttype]
 pub enum DataKey {
     MarketInfo,
@@ -39,6 +44,9 @@ pub enum DataKey {
     /// Guard flag: set to `true` once `deposit_fees` has been called on the
     /// Treasury for this market. Prevents double-crediting (C-68).
     FeeDeposited,
+    /// Guard flag: set to `true` once `sweep_dust` has been called on this
+    /// market. Prevents re-running the dust sweep (C-69 / C-83).
+    DustSwept,
 }
 
 #[contract]
@@ -267,7 +275,7 @@ impl MarketContract {
                 bet_id: bet_id.clone(),
                 bettor,
                 market_id: market_id_u64,
-                side: side.into(),
+                side,
                 amount,
                 placed_at,
                 claimed: false,
@@ -894,7 +902,7 @@ impl MarketContract {
         events::emit_dispute_resolved(
             &env,
             market_id_to_u64(&market.market_id),
-            override_outcome.into(),
+            override_outcome,
         );
     }
 
@@ -1527,5 +1535,38 @@ mod tests {
         for name in names.iter() {
             assert!(is_snake_case(name), "topic `{}` is not snake_case", name);
         }
+    }
+
+    // ─── C-83: MAX_DISPUTE_REASON_LEN and DustSwept guard ────────────────────
+
+    #[test]
+    fn test_dispute_reason_at_max_length_accepted() {
+        let (ctx, bettor, _) = resolved_ctx(Outcome::FighterA);
+        let reason = Bytes::from_slice(
+            &ctx.env,
+            &vec![b'x'; MAX_DISPUTE_REASON_LEN as usize],
+        );
+        ctx.client.dispute_resolution(&bettor, &reason);
+    }
+
+    #[test]
+    #[should_panic(expected = "dispute reason exceeds maximum length")]
+    fn test_dispute_reason_over_max_length_rejected() {
+        let (ctx, bettor, _) = resolved_ctx(Outcome::FighterA);
+        let reason = Bytes::from_slice(
+            &ctx.env,
+            &vec![b'x'; (MAX_DISPUTE_REASON_LEN + 1) as usize],
+        );
+        ctx.client.dispute_resolution(&bettor, &reason);
+    }
+
+    #[test]
+    #[should_panic(expected = "dust already swept")]
+    fn test_sweep_dust_cannot_run_twice() {
+        let (ctx, _, _) = resolved_ctx(Outcome::FighterA);
+        // Jump well past resolved_at + dispute_window_sec + CLAIM_WINDOW_SEC.
+        set_time(&ctx.env, 10_000_000);
+        ctx.client.sweep_dust(&ctx.market_id);
+        ctx.client.sweep_dust(&ctx.market_id);
     }
 }
