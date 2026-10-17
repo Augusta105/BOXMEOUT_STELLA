@@ -28,6 +28,10 @@ pub enum ContractError {
     AlreadyInitialized = 13,
     /// end_time is in the past, or lock_time is after end_time
     InvalidTimestamp = 14,
+    /// protocol_fee_bp exceeds the maximum allowed (1000 = 10%)
+    InvalidFeeBp = 15,
+    /// dispute_window_sec is outside the allowed range (1 hour to 14 days)
+    InvalidDisputeWindow = 16,
 
     // ── Bet Validation ─────────────────────────────────────
     /// Bet amount is below config.min_bet
