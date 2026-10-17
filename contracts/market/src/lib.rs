@@ -246,7 +246,7 @@ impl MarketContract {
         let bet_count: u64 = env.storage().persistent()
             .get(&Symbol::new(&env, "BET_COUNT"))
             .unwrap_or(0u64);
-        let new_count = bet_count + 1;
+        let new_count = bet_count.checked_add(1).expect("bet count overflow");
         env.storage().persistent().set(&Symbol::new(&env, "BET_COUNT"), &new_count);
 
         let mut id_bytes = [0u8; 32];
@@ -923,7 +923,7 @@ impl MarketContract {
         // finalize_resolution becomes callable, so there is no second where both
         // (or neither) are allowed.
         let current_time = env.ledger().timestamp();
-        let dispute_deadline = market.resolved_at + market.dispute_window_sec;
+        let dispute_deadline = market.resolved_at.checked_add(market.dispute_window_sec).expect("dispute deadline overflow");
         if current_time >= dispute_deadline {
             panic!("dispute window has closed");
         }
@@ -1034,7 +1034,7 @@ impl MarketContract {
         match market.status {
             MarketStatus::Resolved => {
                 let current_time = env.ledger().timestamp();
-                let dispute_deadline = market.resolved_at + market.dispute_window_sec;
+                let dispute_deadline = market.resolved_at.checked_add(market.dispute_window_sec).expect("dispute deadline overflow");
                 // Mirrors dispute_resolution: the window closes at exactly
                 // resolved_at + dispute_window_sec.
                 if current_time < dispute_deadline {
