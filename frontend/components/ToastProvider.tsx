@@ -8,11 +8,12 @@ interface ToastItem {
   id: string;
   message: string;
   type: ToastType;
+  href?: string;
 }
 
 interface ToastContextType {
   toasts: ToastItem[];
-  addToast: (message: string, type: ToastType) => void;
+  addToast: (message: string, type: ToastType, href?: string) => void;
   removeToast: (id: string) => void;
 }
 
@@ -21,9 +22,9 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const addToast = (message: string, type: ToastType) => {
+  const addToast = (message: string, type: ToastType, href?: string) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message, type, href }]);
   };
 
   const removeToast = (id: string) => {

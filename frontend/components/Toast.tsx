@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { CheckCircle, XCircle, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -10,6 +11,8 @@ export interface Toast {
   type: ToastType;
   title?: string;
   message: string;
+  /** When set, the toast links to this in-app path. */
+  href?: string;
 }
 
 export interface ToastProps {
@@ -69,6 +72,14 @@ export function Toast({ toast, onDismiss }: ToastProps): JSX.Element {
           <h3 className={`text-sm font-semibold ${styles.textColor}`}>{toast.title}</h3>
         )}
         <p className="text-sm text-gray-200 mt-1">{toast.message}</p>
+        {toast.href && (
+          <Link
+            href={toast.href}
+            className="mt-2 inline-block text-xs font-semibold text-gray-100 underline underline-offset-2 hover:text-white"
+          >
+            View market
+          </Link>
+        )}
       </div>
       <button
         onClick={() => onDismiss(toast.id)}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Navbar } from '@/components/Navbar';
 import { ToastProvider } from '@/components/ToastProvider';
 import { NetworkMismatchBanner } from '@/components/NetworkMismatchBanner';
+import { MarketStatusNotifier } from '@/components/MarketStatusNotifier';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ThemeScript } from '@/components/ThemeScript';
 import { MotionConfigProvider } from '@/components/MotionConfigProvider';
@@ -38,6 +39,7 @@ export default function RootLayout({
                 <main className="min-w-0 overflow-x-hidden">
                   {children}
                 </main>
+                <MarketStatusNotifier />
               </ToastProvider>
             </WalletProvider>
           </ErrorBoundary>
