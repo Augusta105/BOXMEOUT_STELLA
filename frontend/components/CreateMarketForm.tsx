@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isValidStellarPublicKey } from "@/lib/strkey";
 
 export interface CreateMarketFormData {
   fighterAName: string;
@@ -48,7 +49,13 @@ const INITIAL: CreateMarketFormData = {
   oracleAddress: "",
 };
 
-const STARTS_WITH_G = /^G[A-Z0-9]{55}$/;
+/** Shows what a local datetime-local value means in UTC, so the user can check the time they picked. */
+function utcPreview(local: string): string | null {
+  if (!local) return null;
+  const date = new Date(local);
+  if (Number.isNaN(date.getTime())) return null;
+  return `UTC: ${date.toISOString().replace("T", " ").slice(0, 16)}`;
+}
 
 function validate(data: CreateMarketFormData): FormErrors {
   const errors: FormErrors = {};
@@ -75,6 +82,8 @@ function validate(data: CreateMarketFormData): FormErrors {
 
   if (!data.scheduledAt) {
     errors.scheduledAt = "Required";
+  } else if (new Date(data.scheduledAt) <= now) {
+    errors.scheduledAt = "Must be in the future";
   }
 
   if (!data.bettingEndsAt) {
@@ -92,7 +101,7 @@ function validate(data: CreateMarketFormData): FormErrors {
   }
 
   if (!data.oracleAddress.trim()) errors.oracleAddress = "Required";
-  else if (!STARTS_WITH_G.test(data.oracleAddress.trim())) {
+  else if (!isValidStellarPublicKey(data.oracleAddress.trim())) {
     errors.oracleAddress = "Must be a valid G... Stellar address";
   }
 
@@ -109,6 +118,11 @@ function Label({ htmlFor, children }: { htmlFor: string; children: string }) {
       {children}
     </label>
   );
+}
+
+function UtcPreview({ value }: { value: string }) {
+  const text = utcPreview(value);
+  return text ? <p className="mt-1 text-xs text-gray-500">{text}</p> : null;
 }
 
 function Field({
@@ -222,10 +236,12 @@ export function CreateMarketForm({ onSubmit }: CreateMarketFormProps): JSX.Eleme
           <div>
             <Label htmlFor="scheduledAt">Fight Date / Time</Label>
             <Field id="scheduledAt" type="datetime-local" value={formData.scheduledAt} error={touched.scheduledAt ? errors.scheduledAt : undefined} placeholder="" onChange={(v) => set("scheduledAt", v)} />
+            <UtcPreview value={formData.scheduledAt} />
           </div>
           <div>
             <Label htmlFor="bettingEndsAt">Betting Closes At</Label>
             <Field id="bettingEndsAt" type="datetime-local" value={formData.bettingEndsAt} error={touched.bettingEndsAt ? errors.bettingEndsAt : undefined} placeholder="" onChange={(v) => set("bettingEndsAt", v)} />
+            <UtcPreview value={formData.bettingEndsAt} />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="oracleAddress">Oracle Address</Label>
