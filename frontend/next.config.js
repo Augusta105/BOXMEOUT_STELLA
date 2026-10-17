@@ -16,6 +16,10 @@ const nextConfig = {
           path.resolve(__dirname, "e2e/mocks/freighter.ts")
         ),
         new webpack.NormalModuleReplacementPlugin(
+          /^@creit\.tech\/stellar-wallets-kit$/,
+          path.resolve(__dirname, "e2e/mocks/walletKit.ts")
+        ),
+        new webpack.NormalModuleReplacementPlugin(
           /^@\/lib\/stellar$/,
           path.resolve(__dirname, "e2e/mocks/stellar.ts")
         )
