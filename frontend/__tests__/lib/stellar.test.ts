@@ -1,4 +1,4 @@
-import { stroopsToXlm, xlmToStroops, truncateAddress } from '../lib/stellar';
+import { stroopsToXlm, xlmToStroops, truncateAddress, NETWORK, NETWORK_PASSPHRASE } from '@/lib/stellar';
 
 describe('stroopsToXlm', () => {
   it('converts 10,000,000 stroops to "1"', () => {
@@ -70,5 +70,17 @@ describe('truncateAddress', () => {
 
   it('returns input if null/undefined', () => {
     expect(truncateAddress('' || 'test')).toBe('test');
+  });
+});
+
+describe('network constants', () => {
+  it('exposes a non-empty, lowercase NETWORK name', () => {
+    expect(NETWORK.length).toBeGreaterThan(0);
+    expect(NETWORK).toBe(NETWORK.toLowerCase());
+  });
+
+  it('exposes the passphrase for the configured network', () => {
+    expect(typeof NETWORK_PASSPHRASE).toBe('string');
+    expect(NETWORK_PASSPHRASE.length).toBeGreaterThan(0);
   });
 });
