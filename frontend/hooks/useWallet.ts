@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  createElement,
   useCallback,
   useContext,
   useEffect,
@@ -237,7 +238,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [state, connect, disconnect, signTransaction]);
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return createElement(WalletContext.Provider, { value }, children);
 }
 
 export function useWallet(): UseWalletResult {
