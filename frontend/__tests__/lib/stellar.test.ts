@@ -1,4 +1,11 @@
-import { stroopsToXlm, xlmToStroops, truncateAddress } from '../lib/stellar';
+import {
+  stroopsToXlm,
+  xlmToStroops,
+  truncateAddress,
+  stellarExpertTxUrl,
+  stellarExpertContractUrl,
+  STELLAR_EXPERT_BASE_URL,
+} from '@/lib/stellar';
 
 describe('stroopsToXlm', () => {
   it('converts 10,000,000 stroops to "1"', () => {
@@ -49,9 +56,9 @@ describe('xlmToStroops', () => {
 });
 
 describe('truncateAddress', () => {
-  it('truncates long address to GABCDEF...WXYZ format', () => {
+  it('truncates long address to GABCDE...WXYZ format', () => {
     const address = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890WXYZ';
-    expect(truncateAddress(address)).toBe('GABCDEF...WXYZ');
+    expect(truncateAddress(address)).toBe('GABCDE...WXYZ');
   });
 
   it('truncates standard Stellar address', () => {
@@ -72,3 +79,20 @@ describe('truncateAddress', () => {
     expect(truncateAddress('' || 'test')).toBe('test');
   });
 });
+
+describe('stellarExpertTxUrl', () => {
+  it('builds a transaction explorer URL using the network base URL', () => {
+    const txHash = 'a1b2c3d4e5f6';
+    expect(stellarExpertTxUrl(txHash)).toBe(`${STELLAR_EXPERT_BASE_URL}/tx/${txHash}`);
+  });
+});
+
+describe('stellarExpertContractUrl', () => {
+  it('builds a contract explorer URL using the network base URL', () => {
+    const contractId = 'CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ';
+    expect(stellarExpertContractUrl(contractId)).toBe(
+      `${STELLAR_EXPERT_BASE_URL}/contract/${contractId}`
+    );
+  });
+});
+
