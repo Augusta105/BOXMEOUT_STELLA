@@ -27,6 +27,11 @@ pub const MAX_BETS_PER_ADDRESS: u32 = 50;
 /// to claim. Once it elapses, `sweep_dust` may move rounding residue to fees.
 pub const CLAIM_WINDOW_SEC: u64 = 30 * 24 * 60 * 60;
 
+/// Maximum length in bytes of a dispute reason. Bounds persistent storage
+/// cost; a bettor cannot stuff an arbitrarily large blob into storage via the
+/// dispute flow (C-83).
+pub const MAX_DISPUTE_REASON_LEN: u32 = 512;
+
 #[contracttype]
 pub enum DataKey {
     MarketInfo,
@@ -39,6 +44,9 @@ pub enum DataKey {
     /// Guard flag: set to `true` once `deposit_fees` has been called on the
     /// Treasury for this market. Prevents double-crediting (C-68).
     FeeDeposited,
+    /// Guard flag: set to `true` once `sweep_dust` has been called on this
+    /// market. Prevents re-running the dust sweep (C-69 / C-83).
+    DustSwept,
 }
 
 #[contract]
@@ -267,7 +275,7 @@ impl MarketContract {
                 bet_id: bet_id.clone(),
                 bettor,
                 market_id: market_id_u64,
-                side: side.into(),
+                side,
                 amount,
                 placed_at,
                 claimed: false,
@@ -473,7 +481,7 @@ impl MarketContract {
             panic!("market not resolved");
         }
 
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         if !bet_wins(&bet.side, &outcome) {
             panic!("bet did not win");
         }
@@ -494,12 +502,16 @@ impl MarketContract {
         // Transfer payout from Treasury to bettor (issue #1179)
         if payout > 0 {
             let treasury_addr = market.treasury.clone();
-            soroban_sdk::Address::from_contract_id(&env, &treasury_addr.to_contract_id());
-            // Call release_winnings on Treasury
             env.invoke_contract::<()>(
                 &treasury_addr,
                 &Symbol::new(&env, "release_winnings"),
-                soroban_sdk::vec![&env, env.current_contract_address(), market.market_id.clone(), bettor.clone(), soroban_sdk::IntoVal::into_val(&payout, &env)],
+                soroban_sdk::vec![
+                    &env,
+                    env.current_contract_address().into_val(&env),
+                    market.market_id.clone().into_val(&env),
+                    bettor.clone().into_val(&env),
+                    payout.into_val(&env),
+                ],
             );
         }
 
@@ -552,7 +564,7 @@ impl MarketContract {
         if market.status != MarketStatus::Resolved {
             panic!("market not resolved");
         }
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         let winning_pool = winning_pool_for(&market, &outcome).expect("no winning side");
         let net = net_pool(&market);
 
@@ -594,6 +606,57 @@ impl MarketContract {
             (market.market_id.clone(), bettor, claimed_ids, total),
         );
 
+        total
+    }
+
+    /// Read-only view of the total unclaimed payout (winnings or refund) for a bettor (C-111).
+    ///
+    /// Used by the portfolio UI to drive a "Claim all" button without re-implementing
+    /// the pro-rata formula off-chain, which risks rounding mismatches with the contract.
+    ///
+    /// # Returns
+    ///
+    /// Returns the total stroops the bettor can currently claim from this market.
+    /// Returns `0` if the market is unresolved, cancelled, or the bettor has nothing unclaimed.
+    pub fn get_claimable(env: Env, bettor: Address) -> i128 {
+        let market = Self::read_market(&env);
+        if market.status != MarketStatus::Resolved {
+            return 0;
+        }
+        let outcome = match market.outcome {
+            SettledOutcome::Undetermined => return 0,
+            SettledOutcome::Decided(o) => o,
+            SettledOutcome::Cancelled => return 0,
+        };
+        let winning_pool = match winning_pool_for(&market, &outcome) {
+            Some(p) => p,
+            None => return 0,
+        };
+        let net = net_pool(&market);
+
+        let bet_ids: Vec<Bytes> = env.storage().persistent()
+            .get(&DataKey::BetsByAddr(bettor.clone()))
+            .unwrap_or(Vec::new(&env));
+
+        let mut total: i128 = 0;
+        for bet_id in bet_ids.iter().take(MAX_BETS_PER_ADDRESS as usize) {
+            let bet: Bet = match env.storage().persistent().get(&DataKey::Bet(bet_id.clone())) {
+                Some(b) => b,
+                None => continue,
+            };
+            if bet.bettor != bettor || !bet_wins(&bet.side, &outcome) {
+                continue;
+            }
+            let already_claimed: bool = env.storage().persistent()
+                .get(&DataKey::Claimed(bet_id.clone()))
+                .unwrap_or(false);
+            if already_claimed {
+                continue;
+            }
+            total = total
+                .checked_add(pro_rata_payout(bet.amount, net, winning_pool))
+                .expect("claimable overflow");
+        }
         total
     }
 
@@ -639,7 +702,7 @@ impl MarketContract {
             panic!("dust already swept");
         }
 
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         let winning_pool = winning_pool_for(&market, &outcome).expect("no winning side");
         let net = net_pool(&market);
 
@@ -751,11 +814,16 @@ impl MarketContract {
 
         // Transfer refund from Treasury to bettor (issue #1180)
         let treasury_addr = market.treasury.clone();
-        soroban_sdk::Address::from_contract_id(&env, &treasury_addr.to_contract_id());
         env.invoke_contract::<()>(
             &treasury_addr,
             &Symbol::new(&env, "release_winnings"),
-            soroban_sdk::vec![&env, env.current_contract_address(), market.market_id.clone(), bettor.clone(), soroban_sdk::IntoVal::into_val(&bet.amount, &env)],
+            soroban_sdk::vec![
+                &env,
+                env.current_contract_address().into_val(&env),
+                market.market_id.clone().into_val(&env),
+                bettor.clone().into_val(&env),
+                bet.amount.into_val(&env),
+            ],
         );
 
         env.events().publish(
@@ -894,7 +962,7 @@ impl MarketContract {
         events::emit_dispute_resolved(
             &env,
             market_id_to_u64(&market.market_id),
-            override_outcome.into(),
+            override_outcome,
         );
     }
 
@@ -1102,9 +1170,12 @@ impl MarketContract {
             .get(&DataKey::MarketInfo)
             .expect("market not initialized");
 
-        let outcome = match market.outcome.outcome() {
-            Some(o) => o,
-            None => return 0,
+        let outcome = match market.outcome {
+            SettledOutcome::Pending => return 0,
+            SettledOutcome::FighterA => shared::types::Outcome::FighterA,
+            SettledOutcome::FighterB => shared::types::Outcome::FighterB,
+            SettledOutcome::Draw => shared::types::Outcome::Draw,
+            SettledOutcome::NoContest => shared::types::Outcome::NoContest,
         };
 
         if !bet_wins(&bet.side, &outcome) {
@@ -1527,5 +1598,38 @@ mod tests {
         for name in names.iter() {
             assert!(is_snake_case(name), "topic `{}` is not snake_case", name);
         }
+    }
+
+    // ─── C-83: MAX_DISPUTE_REASON_LEN and DustSwept guard ────────────────────
+
+    #[test]
+    fn test_dispute_reason_at_max_length_accepted() {
+        let (ctx, bettor, _) = resolved_ctx(Outcome::FighterA);
+        let reason = Bytes::from_slice(
+            &ctx.env,
+            &vec![b'x'; MAX_DISPUTE_REASON_LEN as usize],
+        );
+        ctx.client.dispute_resolution(&bettor, &reason);
+    }
+
+    #[test]
+    #[should_panic(expected = "dispute reason exceeds maximum length")]
+    fn test_dispute_reason_over_max_length_rejected() {
+        let (ctx, bettor, _) = resolved_ctx(Outcome::FighterA);
+        let reason = Bytes::from_slice(
+            &ctx.env,
+            &vec![b'x'; (MAX_DISPUTE_REASON_LEN + 1) as usize],
+        );
+        ctx.client.dispute_resolution(&bettor, &reason);
+    }
+
+    #[test]
+    #[should_panic(expected = "dust already swept")]
+    fn test_sweep_dust_cannot_run_twice() {
+        let (ctx, _, _) = resolved_ctx(Outcome::FighterA);
+        // Jump well past resolved_at + dispute_window_sec + CLAIM_WINDOW_SEC.
+        set_time(&ctx.env, 10_000_000);
+        ctx.client.sweep_dust(&ctx.market_id);
+        ctx.client.sweep_dust(&ctx.market_id);
     }
 }
