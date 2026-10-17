@@ -11,6 +11,7 @@ import { BetForm } from "@/components/BetForm";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { DisputeModal } from "@/components/DisputeModal";
+import { useWallet } from "@/hooks/useWallet";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 
 // recharts is only needed on this page; keep it out of the shared bundle
@@ -63,6 +64,7 @@ export function MarketDetailClient({
   const { bets: liveBets } = useMarketBets(marketId);
   const { poolA: livePoolA, poolB: livePoolB } = useMarketEvents(marketId);
   const { addToast } = useToast();
+  const { address } = useWallet();
   const [justPlaced, setJustPlaced] = useState<Bet[]>([]);
   const [showDispute, setShowDispute] = useState(false);
 
@@ -73,6 +75,7 @@ export function MarketDetailClient({
   const polledBets = liveBets.length ? liveBets : initialBets;
   // Show a bet placed this session immediately, ahead of the next bet-list poll
   const bets = [...justPlaced.filter((b) => !polledBets.some((pb) => pb.id === b.id)), ...polledBets];
+  const userBets = bets.filter((b) => b.bettor === address);
 
   // useMarketEvents drives live pool totals; fall back to the polled market until the first event lands
   const poolA = livePoolA ?? BigInt(m.poolA);
@@ -191,7 +194,13 @@ export function MarketDetailClient({
       )}
 
       {showDispute && (
-        <DisputeModal market={m} onDisputed={() => setShowDispute(false)} />
+        <DisputeModal
+          market={m}
+          userBets={userBets}
+          isOpen={showDispute}
+          onDisputed={() => setShowDispute(false)}
+          onClose={() => setShowDispute(false)}
+        />
       )}
     </div>
   );
