@@ -69,6 +69,13 @@ export function stellarExpertTxUrl(txHash: string): string {
   return `${STELLAR_EXPERT_BASE_URL}/tx/${txHash}`;
 }
 
+/**
+ * Builds a stellar.expert URL for a contract ID, such as a market's contract address.
+ */
+export function stellarExpertContractUrl(contractId: string): string {
+  return `${STELLAR_EXPERT_BASE_URL}/contract/${contractId}`;
+}
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export interface SorobanInvokeParams {
