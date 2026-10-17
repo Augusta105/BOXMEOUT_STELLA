@@ -183,7 +183,7 @@ impl MarketFactory {
         let market_id_hash = env.crypto().sha256(&preimage);
         let market_id = Bytes::from_array(&env, &market_id_hash);
         let salt = market_id_hash;
-        let wasm_hash: BytesN<32> = env.storage().persistent().get(&MARKET_WASM_HASH).ok_or(ContractError::AlreadyInitialized)?;
+        let wasm_hash: BytesN<32> = env.storage().persistent().get(&MARKET_WASM_HASH).ok_or(ContractError::MarketNotFound)?;
         let market_address = env
             .deployer()
             .with_address(env.current_contract_address(), salt)
