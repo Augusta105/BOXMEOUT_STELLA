@@ -459,16 +459,7 @@ impl MarketContract {
         }
 
         // Emit market_resolved event with market_id, outcome, and resolution_time
-        let market_id_u64 = u64::from_le_bytes([
-            market.market_id.as_ref()[0],
-            market.market_id.as_ref()[1],
-            market.market_id.as_ref()[2],
-            market.market_id.as_ref()[3],
-            market.market_id.as_ref()[4],
-            market.market_id.as_ref()[5],
-            market.market_id.as_ref()[6],
-            market.market_id.as_ref()[7],
-        ]);
+        let market_id_u64 = market_id_to_u64(&market.market_id);
         events::emit_market_resolved(&env, market_id_u64, outcome, resolution_time);
     }
 
@@ -552,16 +543,7 @@ impl MarketContract {
         }
 
         // Emit winnings_claimed event with market_id, claimant, and amount (payout after fee)
-        let market_id_u64 = u64::from_le_bytes([
-            market.market_id.as_ref()[0],
-            market.market_id.as_ref()[1],
-            market.market_id.as_ref()[2],
-            market.market_id.as_ref()[3],
-            market.market_id.as_ref()[4],
-            market.market_id.as_ref()[5],
-            market.market_id.as_ref()[6],
-            market.market_id.as_ref()[7],
-        ]);
+        let market_id_u64 = market_id_to_u64(&market.market_id);
 
         // Create ClaimReceipt for event emission
         use shared::types::ClaimReceipt;
