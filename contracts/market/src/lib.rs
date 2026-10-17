@@ -32,6 +32,10 @@ pub const CLAIM_WINDOW_SEC: u64 = 30 * 24 * 60 * 60;
 /// dispute flow (C-83).
 pub const MAX_DISPUTE_REASON_LEN: u32 = 512;
 
+/// Time after `scheduled_at` during which the oracle is expected to resolve
+/// the market. Once it elapses, `cancel_unresolved` becomes permissionless (C-99).
+pub const RESOLUTION_TIMEOUT_SEC: u64 = 7 * 24 * 60 * 60;
+
 #[contracttype]
 pub enum DataKey {
     MarketInfo,
@@ -319,6 +323,32 @@ impl MarketContract {
             &env,
             market_id_to_u64(&market.market_id),
             String::from_str(&env, "cancelled_by_admin"),
+        );
+    }
+
+    /// Permissionless cancel for a market the oracle never resolved (C-99).
+    ///
+    /// After `scheduled_at + RESOLUTION_TIMEOUT_SEC`, anyone can call this to
+    /// move a `Locked` market to `Cancelled` so bettors can claim refunds.
+    /// Prevents stakes from being stuck forever if the oracle goes offline.
+    pub fn cancel_unresolved(env: Env) {
+        let mut market = Self::read_market(&env);
+        if market.status != MarketStatus::Locked {
+            panic!("market not locked");
+        }
+        let now = env
+            .ledger()
+            .timestamp()
+            .expect("no timestamp");
+        if now < market.scheduled_at + RESOLUTION_TIMEOUT_SEC {
+            panic!("resolution timeout not elapsed");
+        }
+        market.status = MarketStatus::Cancelled;
+        Self::write_market(&env, &market);
+        events::emit_market_cancelled(
+            &env,
+            market_id_to_u64(&market.market_id),
+            String::from_str(&env, "oracle_timeout"),
         );
     }
 
