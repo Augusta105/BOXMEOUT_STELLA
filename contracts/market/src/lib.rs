@@ -346,7 +346,8 @@ impl MarketContract {
             .ledger()
             .timestamp()
             .expect("no timestamp");
-        if now < market.scheduled_at + RESOLUTION_TIMEOUT_SEC {
+        let deadline = market.scheduled_at.checked_add(RESOLUTION_TIMEOUT_SEC).expect("resolution timeout overflow");
+        if now < deadline {
             panic!("resolution timeout not elapsed");
         }
         market.status = MarketStatus::Cancelled;
