@@ -253,6 +253,12 @@ impl MarketFactory {
             .get(&(key_prefix, key_suffix))
     }
 
+    /// Returns the contract address of a registered market, or `None` if the
+    /// market_id is unknown. Used by Treasury to authorise deposits and payouts (C-93).
+    pub fn get_market_address(env: Env, market_id: Bytes) -> Option<Address> {
+        Self::get_market(env, market_id).map(|info| info.address)
+    }
+
     /// Returns a bounded, stably-ordered (creation order) page of all markets
     /// ever created. `limit` is capped at `MAX_PAGE_SIZE` regardless of the
     /// value requested, to bound gas.
