@@ -114,8 +114,14 @@ impl MarketContract {
         if env.storage().persistent().has(&DataKey::MarketInfo) {
             return Err(ContractError::AlreadyInitialized);
         }
-        if betting_ends_at > scheduled_at {
+        if betting_ends_at >= scheduled_at {
             return Err(ContractError::InvalidTimestamp);
+        }
+        if protocol_fee_bp > 1000 {
+            return Err(ContractError::InvalidFeeBp);
+        }
+        if dispute_window_sec < 3600 || dispute_window_sec > 14 * 24 * 60 * 60 {
+            return Err(ContractError::InvalidDisputeWindow);
         }
         let market = Market {
             market_id: market_id.clone(),
