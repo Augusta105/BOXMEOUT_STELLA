@@ -235,6 +235,37 @@ one replica after a full outage to restore the schedule.
 
 ---
 
+## Indexer observability and alerts (B-112)
+
+The indexer runs as its own process, so it serves its own metrics endpoint:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INDEXER_METRICS_PORT` | `9100` | Port for the indexer `/metrics` endpoint. |
+| `INDEXER_MAX_LEDGER_LAG` | `120` | Ledgers the indexer may fall behind the RPC head before `/ready` reports not-ready. |
+
+Metrics:
+
+- `indexer_last_ledger`: last ledger the indexer has checkpointed. It should keep rising.
+- `indexer_ledger_lag`: ledgers between the RPC head and the indexer cursor.
+- `indexer_event_process_seconds{type}`: time spent per event, by canonical type.
+- `soroban_rpc_request_seconds{method}`: Soroban RPC latency, by method.
+
+The indexer cursor also advances across ledgers that contain no events, once a
+poll returns a page short of its limit. Without this, a quiet chain would look
+like a stalled indexer.
+
+`/ready` returns 503 with `checks.indexer` set to `error` when the indexer
+cursor is more than `INDEXER_MAX_LEDGER_LAG` behind the RPC head. The response
+includes `lagLedgers`.
+
+Example alert rules are in [`docs/prometheus/indexer-alerts.yml`](prometheus/indexer-alerts.yml).
+Validate them with `promtool check rules docs/prometheus/indexer-alerts.yml`.
+They cover a stalled indexer, lag, RPC failures and latency, and market lifecycle
+jobs that fail or stop completing.
+
+---
+
 ## Running tests
 
 ```bash
