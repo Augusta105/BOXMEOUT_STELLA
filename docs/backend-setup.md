@@ -191,6 +191,50 @@ npm run dev
 
 ---
 
+## Scheduled market lifecycle jobs (B-111)
+
+Two jobs keep markets moving without manual admin action:
+
+| Job | Runs | Effect |
+|---|---|---|
+| `enforce-market-locks` | every interval | Locks Open markets whose `bettingEndsAt` has passed (`lock_market` on-chain). |
+| `auto-finalize-expired-windows` | every interval | Finalises Locked markets whose dispute window has elapsed (enqueues `resolve_market`). |
+
+They are BullMQ **repeatable jobs** on the `market-lifecycle` queue:
+
+- **Registered on startup.** Every replica calls `upsertJobScheduler` for both
+  jobs. Redis keeps one scheduler per job name, so registering from several
+  replicas is idempotent.
+- **Removed on shutdown.** `SIGTERM`/`SIGINT` removes both schedulers and closes
+  the worker before the database and Redis connections are closed.
+- **Single-flight across replicas.** Each tick produces one job, and each run also
+  takes a Redis lock (`lifecycle-lock:<job>`, 5-minute TTL, released on finish).
+  If another replica still holds the lock, the tick is skipped, so a market is
+  never processed by two replicas at the same time.
+
+Configuration:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LIFECYCLE_JOB_INTERVAL_MS` | `60000` | How often both jobs run. |
+| `REDIS_HOST` / `REDIS_PORT` | `127.0.0.1` / `6379` | BullMQ connection for the queue. |
+| `REDIS_URL` | `redis://localhost:6379` | Connection used for the single-flight lock. |
+
+Metrics (exposed on `/metrics`):
+
+- `lock_job_success_total`, `lock_job_failure_total`
+- `finalize_job_success_total`, `finalize_job_failure_total`
+
+A run increments exactly one of the success or failure counters. A tick skipped
+because another replica holds the lock increments neither.
+
+**Operational note.** The schedulers are shared, so when one replica shuts down
+it removes them for every replica. Until another replica starts again (a rolling
+restart usually takes seconds), no new lifecycle jobs are created. Restart at least
+one replica after a full outage to restore the schedule.
+
+---
+
 ## Running tests
 
 ```bash
