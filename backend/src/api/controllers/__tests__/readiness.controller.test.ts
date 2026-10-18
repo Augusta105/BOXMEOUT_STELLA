@@ -159,7 +159,7 @@ describe("B-60: GET /ready", () => {
     mockPing.mockResolvedValue("PONG");
     mockGetHealth.mockResolvedValue({ status: "healthy" });
 
-    const { res, status, json } = makeRes();
+    const { res, json } = makeRes();
     await readinessHandler(req, res);
 
     const body = json.mock.calls[0][0];
