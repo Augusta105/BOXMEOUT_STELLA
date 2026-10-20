@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMarket } from "@/hooks/useMarket";
 import { useMarketBets } from "@/hooks/useMarketBets";
 import { useMarketEvents } from "@/hooks/useMarketEvents";
+import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ToastProvider";
 import { Market, Bet } from "@/lib/api";
 import { FighterCard } from "@/components/FighterCard";
@@ -60,9 +61,9 @@ export function MarketDetailClient({
   initialBets,
   initialOddsHistory,
 }: MarketDetailClientProps): JSX.Element {
+  const { address } = useWallet();
   const { market } = useMarket(marketId);
   const { bets: liveBets } = useMarketBets(marketId);
-  const { poolA: livePoolA, poolB: livePoolB } = useMarketEvents(marketId);
   const { addToast } = useToast();
   const [justPlaced, setJustPlaced] = useState<Bet[]>([]);
   const [showDispute, setShowDispute] = useState(false);
@@ -76,6 +77,13 @@ export function MarketDetailClient({
   const polledBets = liveBets.length ? liveBets : initialBets;
   // Show a bet placed this session immediately, ahead of the next bet-list poll
   const bets = [...justPlaced.filter((b) => !polledBets.some((pb) => pb.id === b.id)), ...polledBets];
+  const hasPosition = Boolean(address && bets.some((b) => b.bettor === address));
+
+  const { poolA: livePoolA, poolB: livePoolB } = useMarketEvents(marketId, {
+    hasPosition,
+    initialStatus: m.status,
+    marketTitle: `${m.fighterA.name} vs ${m.fighterB.name}`,
+  });
 
   // useMarketEvents drives live pool totals; fall back to the polled market until the first event lands
   const poolA = livePoolA ?? BigInt(m.poolA);
