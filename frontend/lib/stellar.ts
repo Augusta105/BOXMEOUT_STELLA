@@ -1,5 +1,5 @@
 import type { Transaction, xdr } from "@stellar/stellar-sdk";
-import { ContractError, ContractErrorException, parseContractErrorCode } from "./errors";
+import { ContractErrorException, parseContractErrorCode } from "./errors";
 
 // The SDK is large; load it only when a transaction is actually built or decoded
 // so pages that just read the network constants below don't ship it.
@@ -70,7 +70,7 @@ export function stellarExpertTxUrl(txHash: string): string {
 }
 
 /**
- * Builds a stellar.expert URL for a contract ID, such as a market's contract address.
+ * Builds a stellar.expert URL for a given contract address / ID.
  */
 export function stellarExpertContractUrl(contractId: string): string {
   return `${STELLAR_EXPERT_BASE_URL}/contract/${contractId}`;
@@ -184,7 +184,9 @@ export async function buildSorobanInvocation(
         if (Array.isArray(arg)) {
           return nativeToScVal(arg);
         }
-        if (arg instanceof sdkXdr.ScVal) return arg;
+        if (arg !== null && typeof arg === "object" && "_arm" in arg) {
+          return arg as xdr.ScVal;
+        }
         return nativeToScVal(arg);
       }),
     },

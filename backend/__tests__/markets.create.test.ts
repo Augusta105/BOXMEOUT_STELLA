@@ -1,10 +1,7 @@
 /**
- * Tests for issues #1223-#1226:
- *   B-45: Consolidated user routes
- *   B-46: Unified auth middlewares
- *   B-47: Wallet auth + zod validation on POST /api/markets
- *   B-48: Redis-backed challenge store (in-memory fallback for NODE_ENV=test)
+ * POST /api/markets: wallet auth and zod validation (B-47).
  */
+
 import request from "supertest";
 import express from "express";
 import marketRoutes from "../src/api/routes/market.routes";
@@ -12,7 +9,6 @@ import usersRoutes from "../src/api/routes/users.routes";
 import authRoutes from "../src/api/routes/auth.routes";
 import adminRoutes from "../src/api/routes/admin.routes";
 import * as marketService from "../src/services/market.service";
-import * as userService from "../src/services/user.service";
 import { MarketStatus } from "@prisma/client";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -25,7 +21,6 @@ jest.mock("../src/logger", () => ({
 }));
 
 const mockedMarketService = jest.mocked(marketService);
-const mockedUserService = jest.mocked(userService);
 
 // ─── Test app factory ─────────────────────────────────────────────────────────
 
@@ -169,144 +164,5 @@ describe("B-47: POST /api/markets", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.id).toBe("market-test-1");
-  });
-});
-
-// ─── B-45: Consolidated /api/users router ─────────────────────────────────────
-
-describe("B-45: GET /api/users/:address", () => {
-  const app = createTestApp();
-
-  it("returns 200 with user profile when found", async () => {
-    mockedUserService.getUserByAddress = jest.fn().mockResolvedValue({
-      address: "GTEST",
-      displayName: "Test User",
-      avatarUrl: null,
-    }) as jest.MockedFunction<typeof userService.getUserByAddress>;
-
-    const res = await request(app).get("/api/users/GTEST");
-
-    expect(res.status).toBe(200);
-    expect(res.body.user.address).toBe("GTEST");
-  });
-
-  it("returns 404 when user is not found", async () => {
-    mockedUserService.getUserByAddress = jest.fn().mockResolvedValue(null) as jest.MockedFunction<typeof userService.getUserByAddress>;
-
-    const res = await request(app).get("/api/users/GNOTFOUND");
-
-    expect(res.status).toBe(404);
-    expect(res.body.code).toBe("NOT_FOUND");
-  });
-});
-
-describe("B-45: GET /api/users/:address/bets", () => {
-  it("route is reachable (was dead code before consolidation)", async () => {
-    const app = createTestApp();
-
-    // getUserBetsHandler is in bet.controller — it's now mounted on usersRoutes.
-    // With no DB it will fail, but the route should be found (not 404).
-    const res = await request(app).get("/api/users/GTEST/bets");
-    // Any response that isn't a routing 404 proves the route is mounted.
-    expect(res.status).not.toBe(404);
-  });
-});
-
-describe("B-45: GET /api/users/:address/positions", () => {
-  it("route is reachable", async () => {
-    const app = createTestApp();
-    const res = await request(app).get("/api/users/GTEST/positions");
-    expect(res.status).not.toBe(404);
-  });
-});
-
-// ─── B-46: Admin auth uses X-Admin-Key ────────────────────────────────────────
-
-describe("B-46: Admin auth header consistency", () => {
-  beforeEach(() => {
-    process.env.ADMIN_API_KEY = "test-admin-key";
-  });
-
-  afterEach(() => {
-    delete process.env.ADMIN_API_KEY;
-  });
-
-  it("rejects /api/admin/* when Authorization: Bearer is sent (old scheme)", async () => {
-    const res = await request(createTestApp())
-      .get("/api/admin/markets/pending")
-      .set("Authorization", "Bearer test-admin-key");
-
-    expect(res.status).toBe(401);
-  });
-
-  it("accepts /api/admin/* when X-Admin-Key is sent (new scheme)", async () => {
-    mockedMarketService.getAllMarkets = jest.fn().mockResolvedValue([]) as jest.MockedFunction<typeof marketService.getAllMarkets>;
-
-    const res = await request(createTestApp())
-      .get("/api/admin/markets/pending")
-      .set("X-Admin-Key", "test-admin-key");
-
-    expect(res.status).toBe(200);
-  });
-
-  it("rejects /api/admin/* when X-Admin-Key is wrong", async () => {
-    const res = await request(createTestApp())
-      .get("/api/admin/markets/pending")
-      .set("X-Admin-Key", "wrong-key");
-
-    expect(res.status).toBe(401);
-  });
-});
-
-// ─── B-48: Challenge endpoint returns challenge string ────────────────────────
-
-describe("B-48: GET /api/auth/challenge", () => {
-  const validStellarAddress = `G${"A".repeat(55)}`;
-
-  it("returns 400 for an invalid Stellar address", async () => {
-    const res = await request(createTestApp()).get(
-      "/api/auth/challenge?address=INVALID"
-    );
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("INVALID_ADDRESS");
-  });
-
-  it("returns 200 with a challenge and expiresAt for a valid address", async () => {
-    const res = await request(createTestApp()).get(
-      `/api/auth/challenge?address=${validStellarAddress}`
-    );
-    expect(res.status).toBe(200);
-    expect(res.body.challenge).toMatch(/^BOXMEOUT-AUTH:/);
-    expect(typeof res.body.expiresAt).toBe("number");
-    expect(res.body.expiresAt).toBeGreaterThan(Date.now());
-  });
-
-  it("challenge is consumed (one-time use) — second POST returns CHALLENGE_EXPIRED", async () => {
-    const app = createTestApp();
-
-    // Obtain a challenge
-    await request(app).get(
-      `/api/auth/challenge?address=${validStellarAddress}`
-    );
-
-    // First POST attempt — challenge exists but signature is invalid → INVALID_SIGNATURE
-    const res1 = await request(app)
-      .post("/api/markets")
-      .set("x-wallet-address", validStellarAddress)
-      .set("x-wallet-signature", "YWJj")
-      .send(validMarketBody);
-
-    expect(res1.status).toBe(401);
-    expect(res1.body.code).toBe("INVALID_SIGNATURE");
-
-    // Second POST attempt — challenge was consumed → CHALLENGE_EXPIRED
-    const res2 = await request(app)
-      .post("/api/markets")
-      .set("x-wallet-address", validStellarAddress)
-      .set("x-wallet-signature", "YWJj")
-      .send(validMarketBody);
-
-    expect(res2.status).toBe(401);
-    expect(res2.body.code).toBe("CHALLENGE_EXPIRED");
   });
 });

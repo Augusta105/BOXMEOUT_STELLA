@@ -4,6 +4,8 @@ import { CheckCircle, XCircle, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
+import Link from "next/link";
+
 export type ToastType = "success" | "error" | "info";
 
 export interface Toast {
@@ -11,8 +13,13 @@ export interface Toast {
   type: ToastType;
   title?: string;
   message: string;
-  /** When set, the toast links to this in-app path. */
+  /** When set, the toast links to this in-app route. */
   href?: string;
+  /** Optional interactive action (e.g. opt-in buttons). */
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 export interface ToastProps {
@@ -72,14 +79,25 @@ export function Toast({ toast, onDismiss }: ToastProps): JSX.Element {
           <h3 className={`text-sm font-semibold ${styles.textColor}`}>{toast.title}</h3>
         )}
         <p className="text-sm text-gray-200 mt-1">{toast.message}</p>
-        {toast.href && (
-          <Link
-            href={toast.href}
-            className="mt-2 inline-block text-xs font-semibold text-gray-100 underline underline-offset-2 hover:text-white"
-          >
-            View market
-          </Link>
-        )}
+        <div className="flex items-center gap-2 mt-2">
+          {toast.href && (
+            <Link
+              href={toast.href}
+              className="text-xs font-semibold text-gray-100 underline underline-offset-2 hover:text-white"
+            >
+              View market
+            </Link>
+          )}
+          {toast.action && (
+            <button
+              type="button"
+              onClick={toast.action.onClick}
+              className="text-xs font-semibold rounded bg-amber-500 px-2 py-0.5 text-black hover:bg-amber-400 transition-colors"
+            >
+              {toast.action.label}
+            </button>
+          )}
+        </div>
       </div>
       <button
         onClick={() => onDismiss(toast.id)}

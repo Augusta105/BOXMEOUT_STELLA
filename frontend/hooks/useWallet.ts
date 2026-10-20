@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  createElement,
   createContext,
+  createElement,
   useCallback,
   useContext,
   useEffect,
@@ -189,7 +191,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       result = await freighterSignTransaction(xdr, {
         networkPassphrase: NETWORK_PASSPHRASE,
-        address,
+        address: state.address,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -237,7 +239,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [state, connect, disconnect, signTransaction]);
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return createElement(WalletContext.Provider, { value }, children);
 }
 
 export function useWallet(): UseWalletResult {
