@@ -93,21 +93,6 @@ impl From<shared::types::Outcome> for SettledOutcome {
     }
 }
 
-impl SettledOutcome {
-    /// Returns the resolved shared outcome, panicking if the market is still
-    /// `Pending`. Use this wherever the contract logic has already established
-    /// that the market is resolved (C-85).
-    pub fn require_resolved(&self) -> shared::types::Outcome {
-        match self {
-            SettledOutcome::Pending => panic!("no outcome set"),
-            SettledOutcome::FighterA => shared::types::Outcome::FighterA,
-            SettledOutcome::FighterB => shared::types::Outcome::FighterB,
-            SettledOutcome::Draw => shared::types::Outcome::Draw,
-            SettledOutcome::NoContest => shared::types::Outcome::NoContest,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
