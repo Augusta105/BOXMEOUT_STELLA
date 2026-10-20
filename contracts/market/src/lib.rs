@@ -481,7 +481,7 @@ impl MarketContract {
             panic!("market not resolved");
         }
 
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         if !bet_wins(&bet.side, &outcome) {
             panic!("bet did not win");
         }
@@ -564,7 +564,7 @@ impl MarketContract {
         if market.status != MarketStatus::Resolved {
             panic!("market not resolved");
         }
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         let winning_pool = winning_pool_for(&market, &outcome).expect("no winning side");
         let net = net_pool(&market);
 
@@ -651,7 +651,7 @@ impl MarketContract {
             panic!("dust already swept");
         }
 
-        let outcome = market.outcome.clone().expect("no outcome set");
+        let outcome = market.outcome.require_resolved();
         let winning_pool = winning_pool_for(&market, &outcome).expect("no winning side");
         let net = net_pool(&market);
 
@@ -1119,9 +1119,12 @@ impl MarketContract {
             .get(&DataKey::MarketInfo)
             .expect("market not initialized");
 
-        let outcome = match market.outcome.outcome() {
-            Some(o) => o,
-            None => return 0,
+        let outcome = match market.outcome {
+            SettledOutcome::Pending => return 0,
+            SettledOutcome::FighterA => shared::types::Outcome::FighterA,
+            SettledOutcome::FighterB => shared::types::Outcome::FighterB,
+            SettledOutcome::Draw => shared::types::Outcome::Draw,
+            SettledOutcome::NoContest => shared::types::Outcome::NoContest,
         };
 
         if !bet_wins(&bet.side, &outcome) {
