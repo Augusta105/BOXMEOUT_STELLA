@@ -190,6 +190,7 @@ export async function confirmFightResult(
     include: { market: true },
   });
   if (!oracleResult) throw new Error(`OracleResult not found: ${oracle_result_id}`);
+  logger.info({ oracle_result_id, admin }, "oracle result confirmed");
 
   await enqueueResolution(oracleResult.marketId, oracleResult.outcome);
 }
