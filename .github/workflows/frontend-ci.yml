@@ -71,6 +71,10 @@ jobs:
           NEXT_PUBLIC_SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
           NEXT_PUBLIC_MARKET_FACTORY_CONTRACT_ID: "CDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
+      # ── Bundle size budget ───────────────────────────────────────────────────
+      - name: Check bundle budget
+        run: npm run check:bundle
+
       # ── Storybook build ──────────────────────────────────────────────────────
       - name: Build Storybook
         run: npm run build-storybook
