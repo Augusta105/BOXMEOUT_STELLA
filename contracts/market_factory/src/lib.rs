@@ -5,7 +5,7 @@
 //! ============================================================
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Map, String, Symbol, Vec};
 
-use shared::{errors::ContractError, events, types::MarketInfo};
+use shared::{errors::ContractError, events, types::{MarketInfo, ProtocolConfig}};
 
 // Storage keys for persistent state
 const ADMIN: &str = "ADMIN";
@@ -13,6 +13,7 @@ const MARKET_WASM_HASH: &str = "MARKET_WASM_HASH";
 const TREASURY: &str = "TREASURY";
 const PAUSED: &str = "PAUSED";
 const MARKET_COUNT_KEY: &str = "MARKET_COUNT";
+const CONFIG_KEY: &str = "CONFIG";
 // #1191: Changed from single MARKET_MAP to per-market keys
 // Format: ("MARKET", market_id) -> MarketInfo
 // Format: ("MARKET_BY_IDX", index) -> market_id
@@ -131,7 +132,7 @@ impl MarketFactory {
         env.storage()
             .persistent()
             .get(&CONFIG_KEY)
-            .ok_or(ContractError::Unauthorized)
+            .ok_or(ContractError::NotInitialized)
     }
 
     /// Deploys a new Market contract instance and registers its `MarketInfo`.
@@ -183,11 +184,10 @@ impl MarketFactory {
         let market_id_hash = env.crypto().sha256(&preimage);
         let market_id = Bytes::from_array(&env, &market_id_hash);
         let salt = market_id_hash;
-        let wasm_hash: BytesN<32> = env.storage().persistent().get(&MARKET_WASM_HASH).ok_or(ContractError::MarketNotFound)?;
         let market_address = env
             .deployer()
             .with_address(env.current_contract_address(), salt)
-            .deploy_v2(&wasm_hash, ());
+            .deploy_v2(wasm_hash, ());
 
         let config = Self::get_config(&env)?;
         let treasury = Self::get_treasury(&env);
@@ -252,12 +252,6 @@ impl MarketFactory {
         env.storage()
             .persistent()
             .get(&(key_prefix, key_suffix))
-    }
-
-    /// Returns the contract address of a registered market, or `None` if the
-    /// market_id is unknown. Used by Treasury to authorise deposits and payouts (C-93).
-    pub fn get_market_address(env: Env, market_id: Bytes) -> Option<Address> {
-        Self::get_market(env, market_id).map(|info| info.address)
     }
 
     /// Returns a bounded, stably-ordered (creation order) page of all markets

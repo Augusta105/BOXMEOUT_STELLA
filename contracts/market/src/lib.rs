@@ -32,10 +32,6 @@ pub const CLAIM_WINDOW_SEC: u64 = 30 * 24 * 60 * 60;
 /// dispute flow (C-83).
 pub const MAX_DISPUTE_REASON_LEN: u32 = 512;
 
-/// Time after `scheduled_at` during which the oracle is expected to resolve
-/// the market. Once it elapses, `cancel_unresolved` becomes permissionless (C-99).
-pub const RESOLUTION_TIMEOUT_SEC: u64 = 7 * 24 * 60 * 60;
-
 #[contracttype]
 pub enum DataKey {
     MarketInfo,
@@ -114,14 +110,8 @@ impl MarketContract {
         if env.storage().persistent().has(&DataKey::MarketInfo) {
             return Err(ContractError::AlreadyInitialized);
         }
-        if betting_ends_at >= scheduled_at {
+        if betting_ends_at > scheduled_at {
             return Err(ContractError::InvalidTimestamp);
-        }
-        if protocol_fee_bp > 1000 {
-            return Err(ContractError::InvalidFeeBp);
-        }
-        if dispute_window_sec < 3600 || dispute_window_sec > 14 * 24 * 60 * 60 {
-            return Err(ContractError::InvalidDisputeWindow);
         }
         let market = Market {
             market_id: market_id.clone(),
@@ -246,7 +236,7 @@ impl MarketContract {
         let bet_count: u64 = env.storage().persistent()
             .get(&Symbol::new(&env, "BET_COUNT"))
             .unwrap_or(0u64);
-        let new_count = bet_count.checked_add(1).expect("bet count overflow");
+        let new_count = bet_count + 1;
         env.storage().persistent().set(&Symbol::new(&env, "BET_COUNT"), &new_count);
 
         let mut id_bytes = [0u8; 32];
@@ -329,33 +319,6 @@ impl MarketContract {
             &env,
             market_id_to_u64(&market.market_id),
             String::from_str(&env, "cancelled_by_admin"),
-        );
-    }
-
-    /// Permissionless cancel for a market the oracle never resolved (C-99).
-    ///
-    /// After `scheduled_at + RESOLUTION_TIMEOUT_SEC`, anyone can call this to
-    /// move a `Locked` market to `Cancelled` so bettors can claim refunds.
-    /// Prevents stakes from being stuck forever if the oracle goes offline.
-    pub fn cancel_unresolved(env: Env) {
-        let mut market = Self::read_market(&env);
-        if market.status != MarketStatus::Locked {
-            panic!("market not locked");
-        }
-        let now = env
-            .ledger()
-            .timestamp()
-            .expect("no timestamp");
-        let deadline = market.scheduled_at.checked_add(RESOLUTION_TIMEOUT_SEC).expect("resolution timeout overflow");
-        if now < deadline {
-            panic!("resolution timeout not elapsed");
-        }
-        market.status = MarketStatus::Cancelled;
-        Self::write_market(&env, &market);
-        events::emit_market_cancelled(
-            &env,
-            market_id_to_u64(&market.market_id),
-            String::from_str(&env, "oracle_timeout"),
         );
     }
 
@@ -460,7 +423,16 @@ impl MarketContract {
         }
 
         // Emit market_resolved event with market_id, outcome, and resolution_time
-        let market_id_u64 = market_id_to_u64(&market.market_id);
+        let market_id_u64 = u64::from_le_bytes([
+            market.market_id.as_ref()[0],
+            market.market_id.as_ref()[1],
+            market.market_id.as_ref()[2],
+            market.market_id.as_ref()[3],
+            market.market_id.as_ref()[4],
+            market.market_id.as_ref()[5],
+            market.market_id.as_ref()[6],
+            market.market_id.as_ref()[7],
+        ]);
         events::emit_market_resolved(&env, market_id_u64, outcome, resolution_time);
     }
 
@@ -544,7 +516,16 @@ impl MarketContract {
         }
 
         // Emit winnings_claimed event with market_id, claimant, and amount (payout after fee)
-        let market_id_u64 = market_id_to_u64(&market.market_id);
+        let market_id_u64 = u64::from_le_bytes([
+            market.market_id.as_ref()[0],
+            market.market_id.as_ref()[1],
+            market.market_id.as_ref()[2],
+            market.market_id.as_ref()[3],
+            market.market_id.as_ref()[4],
+            market.market_id.as_ref()[5],
+            market.market_id.as_ref()[6],
+            market.market_id.as_ref()[7],
+        ]);
 
         // Create ClaimReceipt for event emission
         use shared::types::ClaimReceipt;
@@ -625,57 +606,6 @@ impl MarketContract {
             (market.market_id.clone(), bettor, claimed_ids, total),
         );
 
-        total
-    }
-
-    /// Read-only view of the total unclaimed payout (winnings or refund) for a bettor (C-111).
-    ///
-    /// Used by the portfolio UI to drive a "Claim all" button without re-implementing
-    /// the pro-rata formula off-chain, which risks rounding mismatches with the contract.
-    ///
-    /// # Returns
-    ///
-    /// Returns the total stroops the bettor can currently claim from this market.
-    /// Returns `0` if the market is unresolved, cancelled, or the bettor has nothing unclaimed.
-    pub fn get_claimable(env: Env, bettor: Address) -> i128 {
-        let market = Self::read_market(&env);
-        if market.status != MarketStatus::Resolved {
-            return 0;
-        }
-        let outcome = match market.outcome {
-            SettledOutcome::Undetermined => return 0,
-            SettledOutcome::Decided(o) => o,
-            SettledOutcome::Cancelled => return 0,
-        };
-        let winning_pool = match winning_pool_for(&market, &outcome) {
-            Some(p) => p,
-            None => return 0,
-        };
-        let net = net_pool(&market);
-
-        let bet_ids: Vec<Bytes> = env.storage().persistent()
-            .get(&DataKey::BetsByAddr(bettor.clone()))
-            .unwrap_or(Vec::new(&env));
-
-        let mut total: i128 = 0;
-        for bet_id in bet_ids.iter().take(MAX_BETS_PER_ADDRESS as usize) {
-            let bet: Bet = match env.storage().persistent().get(&DataKey::Bet(bet_id.clone())) {
-                Some(b) => b,
-                None => continue,
-            };
-            if bet.bettor != bettor || !bet_wins(&bet.side, &outcome) {
-                continue;
-            }
-            let already_claimed: bool = env.storage().persistent()
-                .get(&DataKey::Claimed(bet_id.clone()))
-                .unwrap_or(false);
-            if already_claimed {
-                continue;
-            }
-            total = total
-                .checked_add(pro_rata_payout(bet.amount, net, winning_pool))
-                .expect("claimable overflow");
-        }
         total
     }
 
@@ -906,7 +836,7 @@ impl MarketContract {
         // finalize_resolution becomes callable, so there is no second where both
         // (or neither) are allowed.
         let current_time = env.ledger().timestamp();
-        let dispute_deadline = market.resolved_at.checked_add(market.dispute_window_sec).expect("dispute deadline overflow");
+        let dispute_deadline = market.resolved_at + market.dispute_window_sec;
         if current_time >= dispute_deadline {
             panic!("dispute window has closed");
         }
@@ -1017,7 +947,7 @@ impl MarketContract {
         match market.status {
             MarketStatus::Resolved => {
                 let current_time = env.ledger().timestamp();
-                let dispute_deadline = market.resolved_at.checked_add(market.dispute_window_sec).expect("dispute deadline overflow");
+                let dispute_deadline = market.resolved_at + market.dispute_window_sec;
                 // Mirrors dispute_resolution: the window closes at exactly
                 // resolved_at + dispute_window_sec.
                 if current_time < dispute_deadline {
