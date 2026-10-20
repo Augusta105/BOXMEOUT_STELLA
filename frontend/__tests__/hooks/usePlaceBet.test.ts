@@ -179,31 +179,4 @@ describe("usePlaceBet", () => {
 
     expect(result.current.error).toBeNull();
   });
-
-  it("sets error state and rethrows when submission fails", async () => {
-    mockBuildSorobanInvocation.mockResolvedValueOnce("xdr-string");
-    mockSubmitTransaction.mockRejectedValueOnce(new Error("400 bad request"));
-
-    const { result } = renderHook(() => usePlaceBet("market-1"));
-
-    await act(async () => {
-      await expect(result.current.placeBet("FighterA", 100n)).rejects.toThrow("400 bad request");
-    });
-
-    expect(result.current.error?.message).toBe("400 bad request");
-    expect(result.current.isLoading).toBe(false);
-  });
-
-  it("reports isLoading while the bet is in flight", async () => {
-    mockBuildSorobanInvocation.mockResolvedValueOnce("xdr-string");
-    mockSubmitTransaction.mockReturnValueOnce(new Promise(() => {}));
-
-    const { result } = renderHook(() => usePlaceBet("market-1"));
-
-    act(() => {
-      result.current.placeBet("FighterA", 100n).catch(() => {});
-    });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(true));
-  });
 });

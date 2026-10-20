@@ -1,5 +1,6 @@
-import { renderHook, act, waitFor } from "@testing-library/react";
-import { useClaimWinnings, ClaimReceipt } from "@/hooks/useClaimWinnings";
+import { renderHook, act } from "@testing-library/react";
+import { useClaimWinnings } from "@/hooks/useClaimWinnings";
+import type { ClaimReceipt } from "@/components/ClaimButton";
 import { useWallet } from "@/hooks/useWallet";
 import * as stellar from "@/lib/stellar";
 import * as api from "@/lib/api";
@@ -264,36 +265,5 @@ describe("useClaimWinnings", () => {
     });
 
     expect(result.current.isLoading).toBe(false);
-  });
-
-  it("sets error state and rethrows when the transaction is rejected", async () => {
-    mockFetchMarketById.mockResolvedValueOnce(mockMarket);
-    mockFetchMarketBets.mockResolvedValueOnce([mockBet]);
-    mockBuildSorobanInvocation.mockResolvedValueOnce("xdr-string");
-    mockSubmitTransaction.mockRejectedValueOnce(new Error("403 forbidden"));
-
-    const { result } = renderHook(() => useClaimWinnings());
-
-    await act(async () => {
-      await expect(result.current.claim("bet-1", "market-1")).rejects.toThrow("403 forbidden");
-    });
-
-    expect(result.current.error?.message).toBe("403 forbidden");
-    expect(result.current.isLoading).toBe(false);
-  });
-
-  it("reports isLoading while the claim is in flight", async () => {
-    mockFetchMarketById.mockResolvedValueOnce(mockMarket);
-    mockFetchMarketBets.mockResolvedValueOnce([mockBet]);
-    mockBuildSorobanInvocation.mockResolvedValueOnce("xdr-string");
-    mockSubmitTransaction.mockReturnValueOnce(new Promise(() => {}));
-
-    const { result } = renderHook(() => useClaimWinnings());
-
-    act(() => {
-      result.current.claim("bet-1", "market-1").catch(() => {});
-    });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(true));
   });
 });

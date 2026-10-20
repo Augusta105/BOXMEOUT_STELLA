@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  createElement,
   createContext,
+  createElement,
   useCallback,
   useContext,
   useEffect,
@@ -151,20 +153,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [state.address],
   );
 
-  const signMessage = useCallback(
-    async (message: string): Promise<string> => {
-      if (!state.address) throw new Error("Wallet not connected");
-      try {
-        const result = await getWalletKit().signMessage(message, {
-          networkPassphrase: NETWORK_PASSPHRASE,
-          address: state.address,
-        });
-        return result.signedMessage;
-      } catch (err) {
-        const text = err instanceof Error ? err.message : String(err);
-        if (isUserRejection(text)) throw new UserRejectedError(text);
-        throw err;
-      }
+    let result: Awaited<ReturnType<typeof freighterSignTransaction>>;
+    try {
+      result = await freighterSignTransaction(xdr, {
+        networkPassphrase: NETWORK_PASSPHRASE,
+        address: state.address,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isUserRejection(message)) throw new UserRejectedError(message);
+      throw err;
+    }
+
+    if (result.error) {
+      const message = result.error.message;
+      if (isUserRejection(message)) throw new UserRejectedError(message);
+      throw new Error(message);
+    }
+
+      return result.signedTxXdr;
     },
     [state.address],
   );
@@ -199,7 +206,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [state, connect, disconnect, signTransaction, signMessage]);
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return createElement(WalletContext.Provider, { value }, children);
 }
 
 export function useWallet(): UseWalletResult {

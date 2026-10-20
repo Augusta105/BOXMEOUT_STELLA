@@ -6,6 +6,7 @@ import { NETWORK_PASSPHRASE } from "@/lib/stellar";
 jest.mock("@stellar/freighter-api", () => ({
   isConnected: jest.fn(),
   requestAccess: jest.fn(),
+  getAddress: jest.fn(),
   getNetwork: jest.fn(),
   signTransaction: jest.fn(),
 }));
@@ -14,6 +15,7 @@ jest.mock("@stellar/freighter-api", () => ({
 const freighter = require("@stellar/freighter-api") as {
   isConnected: jest.Mock;
   requestAccess: jest.Mock;
+  getAddress: jest.Mock;
   getNetwork: jest.Mock;
   signTransaction: jest.Mock;
 };
@@ -21,7 +23,16 @@ const freighter = require("@stellar/freighter-api") as {
 describe("useWallet", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
     freighter.getNetwork.mockResolvedValue({ network: "TESTNET", networkPassphrase: NETWORK_PASSPHRASE });
+  });
+
+  it("throws when rendered outside of WalletProvider", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => renderHook(() => useWallet())).toThrow(
+      "useWallet must be used within a WalletProvider"
+    );
+    spy.mockRestore();
   });
 
   describe("when Freighter is not installed", () => {
