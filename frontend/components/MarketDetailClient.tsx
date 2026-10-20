@@ -7,6 +7,7 @@ import { useMarketEvents } from "@/hooks/useMarketEvents";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ToastProvider";
 import { Market, Bet } from "@/lib/api";
+import { stellarExpertContractUrl } from "@/lib/stellar";
 import { FighterCard } from "@/components/FighterCard";
 import { BetForm } from "@/components/BetForm";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
@@ -127,6 +128,15 @@ export function MarketDetailClient({
     }
   }, [m.fighterA.name, m.fighterB.name, addToast]);
 
+  const handleCopyContract = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(m.contractAddress);
+      addToast("Contract address copied!", "success");
+    } catch {
+      addToast("Could not copy contract address.", "error");
+    }
+  }, [m.contractAddress, addToast]);
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -229,6 +239,31 @@ export function MarketDetailClient({
           </svg>
           Share
         </button>
+      </div>
+
+      {/* Contract */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+        <span>Contract</span>
+        <code className="font-mono text-gray-300" title={m.contractAddress}>
+          {m.contractAddress.slice(0, 6)}…{m.contractAddress.slice(-6)}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopyContract}
+          aria-label="Copy contract address"
+          className="rounded border border-gray-600 px-2 py-0.5 text-gray-300 hover:border-gray-400 hover:text-white transition-colors"
+        >
+          Copy
+        </button>
+        <a
+          href={stellarExpertContractUrl(m.contractAddress)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:underline"
+        >
+          View on Stellar Expert
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
       </div>
 
       <CountdownTimer

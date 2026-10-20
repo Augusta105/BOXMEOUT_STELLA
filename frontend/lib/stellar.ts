@@ -162,7 +162,7 @@ function simulationErrorText(simResult: unknown): string {
 export async function buildSorobanInvocation(
   params: SorobanInvokeParams
 ): Promise<string> {
-  const { Operation, SorobanRpc, TransactionBuilder, Timeout, nativeToScVal, addressToScVal } =
+  const { Operation, SorobanRpc, TransactionBuilder, Timeout, nativeToScVal, addressToScVal, xdr: sdkXdr } =
     await loadSdk();
   const server = new SorobanRpc.Server(SOROBAN_RPC_URL, {
     allowHttp: true,
