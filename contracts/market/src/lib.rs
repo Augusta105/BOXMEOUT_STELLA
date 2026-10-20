@@ -2,7 +2,7 @@
 
 pub mod types;
 
-use shared::{events, market_id_to_u64};
+use shared::{events, errors::ContractError, market_id_to_u64};
 use soroban_sdk::{
     contract, contractimpl, contracttype, Address, Bytes, Env, IntoVal, String, Symbol, Vec,
 };
@@ -63,6 +63,53 @@ impl MarketContract {
 
     fn write_market(env: &Env, market: &Market) {
         env.storage().persistent().set(&DataKey::MarketInfo, market);
+    }
+
+    /// Check if a bet side wins against a resolved outcome.
+    fn bet_wins(side: &BetSide, outcome: &Outcome) -> bool {
+        match (side, outcome) {
+            (BetSide::FighterA, Outcome::FighterA) => true,
+            (BetSide::FighterB, Outcome::FighterB) => true,
+            _ => false,
+        }
+    }
+
+    /// Get the total pool for the winning side, or None if no winners.
+    fn winning_pool_for(market: &Market, outcome: &Outcome) -> Option<i128> {
+        match outcome {
+            Outcome::FighterA => {
+                if market.pool_a > 0 {
+                    Some(market.pool_a)
+                } else {
+                    None
+                }
+            }
+            Outcome::FighterB => {
+                if market.pool_b > 0 {
+                    Some(market.pool_b)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Calculate net_pool after deducting protocol fees.
+    fn net_pool(market: &Market) -> i128 {
+        market
+            .total_pool
+            .checked_sub(shared::calculate_fee(market.total_pool, market.protocol_fee_bp))
+            .expect("net_pool underflow")
+    }
+
+    /// Calculate pro-rata payout: (bettor_stake / winning_pool) * net_pool.
+    fn pro_rata_payout(bettor_stake: i128, net: i128, winning_pool: i128) -> i128 {
+        bettor_stake
+            .checked_mul(net)
+            .expect("payout overflow (mult)")
+            .checked_div(winning_pool)
+            .expect("payout division error")
     }
 
     /// Called by MarketFactory immediately after contract deployment.
@@ -282,7 +329,7 @@ impl MarketContract {
             },
         );
 
-        bet_id
+        Ok(bet_id)
     }
 
     /// Transitions market status from Open to Locked.
