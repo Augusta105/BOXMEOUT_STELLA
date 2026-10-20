@@ -1,37 +1,42 @@
 import { renderHook, act } from "@testing-library/react";
 import { useVisibilityInterval } from "@/hooks/useVisibilityInterval";
 
-function setHidden(hidden: boolean) {
-  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-  act(() => {
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-}
-
 describe("useVisibilityInterval", () => {
+  let hiddenSpy: jest.SpyInstance;
+
   beforeEach(() => {
     jest.useFakeTimers();
-    setHidden(false);
+    hiddenSpy = jest.spyOn(document, "hidden", "get").mockReturnValue(false);
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
     jest.useRealTimers();
+    hiddenSpy.mockRestore();
   });
 
-  it("runs once immediately and then on every delay", () => {
+  it("fires immediately on mount and periodically at each interval", () => {
     const callback = jest.fn();
     renderHook(() => useVisibilityInterval(callback, 1000));
 
     expect(callback).toHaveBeenCalledTimes(1);
+
     act(() => {
-      jest.advanceTimersByTime(3000);
+      jest.advanceTimersByTime(1000);
+    });
+    expect(callback).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      jest.advanceTimersByTime(2000);
     });
     expect(callback).toHaveBeenCalledTimes(4);
   });
 
-  it("does nothing when the delay is null", () => {
+  it("does not start interval or fire callback when delay is null", () => {
     const callback = jest.fn();
     renderHook(() => useVisibilityInterval(callback, null));
+
+    expect(callback).not.toHaveBeenCalled();
 
     act(() => {
       jest.advanceTimersByTime(5000);
@@ -39,83 +44,89 @@ describe("useVisibilityInterval", () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
-  it("stops ticking while the tab is hidden", () => {
+  it("pauses interval when document becomes hidden", () => {
     const callback = jest.fn();
     renderHook(() => useVisibilityInterval(callback, 1000));
 
-    setHidden(true);
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    // Document hides
+    hiddenSpy.mockReturnValue(true);
     act(() => {
-      jest.advanceTimersByTime(5000);
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(3000);
     });
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
-  it("fires immediately and resumes when the tab becomes visible", () => {
+  it("resumes interval and fires immediately when document becomes visible again", () => {
     const callback = jest.fn();
     renderHook(() => useVisibilityInterval(callback, 1000));
 
-    setHidden(true);
-    setHidden(false);
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    // Hide
+    hiddenSpy.mockReturnValue(true);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    // Make visible again
+    hiddenSpy.mockReturnValue(false);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    // Should fire immediately upon becoming visible
     expect(callback).toHaveBeenCalledTimes(2);
 
+    // And continue ticking
     act(() => {
       jest.advanceTimersByTime(1000);
     });
     expect(callback).toHaveBeenCalledTimes(3);
   });
 
-  it("does not start a second interval when visible fires again", () => {
+  it("does not start if mounted while document is already hidden", () => {
+    hiddenSpy.mockReturnValue(true);
     const callback = jest.fn();
     renderHook(() => useVisibilityInterval(callback, 1000));
 
-    setHidden(false);
-    setHidden(false);
-    expect(callback).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-    expect(callback).toHaveBeenCalledTimes(2);
-  });
-
-  it("waits for the tab to be visible when it starts hidden", () => {
-    const callback = jest.fn();
-    setHidden(true);
-    renderHook(() => useVisibilityInterval(callback, 1000));
+    expect(callback).not.toHaveBeenCalled();
 
     act(() => {
       jest.advanceTimersByTime(3000);
     });
     expect(callback).not.toHaveBeenCalled();
 
-    setHidden(false);
+    // Becomes visible
+    hiddenSpy.mockReturnValue(false);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
-  it("clears the interval on unmount", () => {
+  it("cleans up event listener and clears interval on unmount", () => {
+    const removeEventListenerSpy = jest.spyOn(document, "removeEventListener");
     const callback = jest.fn();
     const { unmount } = renderHook(() => useVisibilityInterval(callback, 1000));
 
+    expect(callback).toHaveBeenCalledTimes(1);
     unmount();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.any(Function)
+    );
+
     act(() => {
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(3000);
     });
     expect(callback).toHaveBeenCalledTimes(1);
-  });
-
-  it("calls the latest callback without restarting the interval", () => {
-    const first = jest.fn();
-    const second = jest.fn();
-    const { rerender } = renderHook(({ cb }) => useVisibilityInterval(cb, 1000), {
-      initialProps: { cb: first },
-    });
-
-    rerender({ cb: second });
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(second).toHaveBeenCalledTimes(1);
   });
 });

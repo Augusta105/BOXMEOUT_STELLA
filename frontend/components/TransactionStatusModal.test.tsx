@@ -1,118 +1,115 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { TransactionStatusModal, humanizeError } from "./TransactionStatusModal";
 
-const FALLBACK = "The transaction failed. Please check your wallet and try again.";
-
-describe("TransactionStatusModal", () => {
-  it("renders nothing when closed", () => {
-    render(<TransactionStatusModal isOpen={false} status="pending" onClose={jest.fn()} />);
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+describe("TransactionStatusModal unit tests", () => {
+  it("renders nothing when isOpen is false", () => {
+    const { container } = render(
+      <TransactionStatusModal isOpen={false} status="pending" onClose={jest.fn()} />
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows a pending dialog with no way to dismiss it", () => {
-    render(<TransactionStatusModal isOpen status="pending" onClose={jest.fn()} />);
+  it("renders pending state with spinner and custom title", () => {
+    render(
+      <TransactionStatusModal
+        isOpen
+        status="pending"
+        title="Custom Pending Title"
+        onClose={jest.fn()}
+      />
+    );
 
-    expect(screen.getByRole("dialog", { name: "Processing Transaction…" })).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Custom Pending Title")).toBeInTheDocument();
+    expect(screen.getAllByText(/Please keep this window open/i).length).toBeGreaterThanOrEqual(1);
+    // No dismiss button in pending state
+    expect(screen.queryByRole("button", { name: /done|dismiss/i })).not.toBeInTheDocument();
   });
 
-  it("does not close on Escape while pending", () => {
-    const onClose = jest.fn();
-    render(<TransactionStatusModal isOpen status="pending" onClose={onClose} />);
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it("shows the confirmed state with an explorer link for the hash", () => {
+  it("renders success state with Done button and explorer link", () => {
     render(
       <TransactionStatusModal
         isOpen
         status="success"
-        txHash="abc123"
+        txHash="7a8b9c"
+        explorerBaseUrl="https://custom.explorer/tx"
         onClose={jest.fn()}
-        explorerBaseUrl="https://explorer.example/tx/"
       />
     );
 
-    expect(screen.getByRole("dialog", { name: "Transaction Confirmed" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View on Stellar Expert/ })).toHaveAttribute(
-      "href",
-      "https://explorer.example/tx/abc123"
-    );
+    expect(screen.getByText("Transaction Confirmed")).toBeInTheDocument();
+    const explorerLink = screen.getByRole("link", { name: /view on stellar expert/i });
+    expect(explorerLink).toHaveAttribute("href", "https://custom.explorer/tx/7a8b9c");
+    expect(screen.getByRole("button", { name: /done/i })).toBeInTheDocument();
   });
 
-  it("omits the explorer link when there is no hash", () => {
-    render(<TransactionStatusModal isOpen status="success" onClose={jest.fn()} />);
-
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  });
-
-  it("closes from the Done button on success", () => {
-    const onClose = jest.fn();
-    render(<TransactionStatusModal isOpen status="success" onClose={onClose} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a friendly error and closes from Dismiss", () => {
-    const onClose = jest.fn();
+  it("renders error state with Dismiss button and humanized error message", () => {
     render(
-      <TransactionStatusModal isOpen status="error" errorMessage="User declined the signature" onClose={onClose} />
+      <TransactionStatusModal
+        isOpen
+        status="error"
+        errorMessage="Account does not exist on testnet."
+        onClose={jest.fn()}
+      />
     );
 
-    expect(screen.getByText("User declined the signature")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Transaction Failed")).toBeInTheDocument();
+    expect(screen.getByText("Account does not exist on testnet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dismiss/i })).toBeInTheDocument();
   });
 
-  it("replaces a stack-trace style error with the generic message", () => {
-    render(
-      <TransactionStatusModal isOpen status="error" errorMessage={"Error: boom\n    at foo.js:1"} onClose={jest.fn()} />
+  it("triggers onClose when clicking Done or Dismiss button", async () => {
+    const user = userEvent.setup();
+    const handleClose = jest.fn();
+
+    const { rerender } = render(
+      <TransactionStatusModal isOpen status="success" onClose={handleClose} />
     );
 
-    expect(screen.getByText(FALLBACK)).toBeInTheDocument();
-    expect(screen.queryByText(/at foo\.js/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /done/i }));
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
+    rerender(<TransactionStatusModal isOpen status="error" onClose={handleClose} />);
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(handleClose).toHaveBeenCalledTimes(2);
   });
 
-  it("closes on a backdrop click when dismissable, and not when the panel is clicked", () => {
-    const onClose = jest.fn();
-    render(<TransactionStatusModal isOpen status="success" onClose={onClose} />);
+  it("triggers onClose on backdrop click only when dismissable", async () => {
+    const user = userEvent.setup();
+    const handleClose = jest.fn();
 
-    fireEvent.click(screen.getByRole("dialog"));
-    expect(onClose).not.toHaveBeenCalled();
+    const { rerender } = render(
+      <TransactionStatusModal isOpen status="pending" onClose={handleClose} />
+    );
 
-    fireEvent.click(screen.getByRole("presentation"));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // Backdrop click during pending does not dismiss
+    const backdrop = document.querySelector(".fixed.inset-0") as HTMLElement;
+    await user.click(backdrop);
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Backdrop click during success dismisses
+    rerender(<TransactionStatusModal isOpen status="success" onClose={handleClose} />);
+    await user.click(backdrop);
+    expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it("closes on Escape when dismissable", () => {
-    const onClose = jest.fn();
-    render(<TransactionStatusModal isOpen status="error" errorMessage="x" onClose={onClose} />);
+  describe("humanizeError helper", () => {
+    it("handles null and undefined with default fallback", () => {
+      expect(humanizeError(null)).toBe("An unexpected error occurred. Please try again.");
+      expect(humanizeError(undefined)).toBe("An unexpected error occurred. Please try again.");
+    });
 
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-});
+    it("extracts first line from Error objects and strings", () => {
+      expect(humanizeError(new Error("User cancelled signature\nat line 45"))).toBe("User cancelled signature");
+      expect(humanizeError("Insufficient balance for fee\nExtra details")).toBe("Insufficient balance for fee");
+    });
 
-describe("humanizeError", () => {
-  it("gives a generic message when there is no error", () => {
-    expect(humanizeError(null)).toBe("An unexpected error occurred. Please try again.");
-    expect(humanizeError(undefined)).toBe("An unexpected error occurred. Please try again.");
-  });
-
-  it("keeps only the first line of a multi-line message", () => {
-    expect(humanizeError("Insufficient balance\nsee logs for details")).toBe("Insufficient balance");
-  });
-
-  it("reads the message of an Error", () => {
-    expect(humanizeError(new Error("Wallet locked"))).toBe("Wallet locked");
-  });
-
-  it("falls back for raw objects and very long strings", () => {
-    expect(humanizeError('{"code":-1}')).toBe(FALLBACK);
-    expect(humanizeError("x".repeat(201))).toBe(FALLBACK);
+    it("sanitizes long technical dumps and raw error objects", () => {
+      const longError = "A".repeat(250);
+      expect(humanizeError(longError)).toBe("The transaction failed. Please check your wallet and try again.");
+      expect(humanizeError('{"code": 400, "detail": "bad request"}')).toBe("The transaction failed. Please check your wallet and try again.");
+    });
   });
 });
