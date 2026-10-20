@@ -502,12 +502,16 @@ impl MarketContract {
         // Transfer payout from Treasury to bettor (issue #1179)
         if payout > 0 {
             let treasury_addr = market.treasury.clone();
-            soroban_sdk::Address::from_contract_id(&env, &treasury_addr.to_contract_id());
-            // Call release_winnings on Treasury
             env.invoke_contract::<()>(
                 &treasury_addr,
                 &Symbol::new(&env, "release_winnings"),
-                soroban_sdk::vec![&env, env.current_contract_address(), market.market_id.clone(), bettor.clone(), soroban_sdk::IntoVal::into_val(&payout, &env)],
+                soroban_sdk::vec![
+                    &env,
+                    env.current_contract_address().into_val(&env),
+                    market.market_id.clone().into_val(&env),
+                    bettor.clone().into_val(&env),
+                    payout.into_val(&env),
+                ],
             );
         }
 
@@ -759,11 +763,16 @@ impl MarketContract {
 
         // Transfer refund from Treasury to bettor (issue #1180)
         let treasury_addr = market.treasury.clone();
-        soroban_sdk::Address::from_contract_id(&env, &treasury_addr.to_contract_id());
         env.invoke_contract::<()>(
             &treasury_addr,
             &Symbol::new(&env, "release_winnings"),
-            soroban_sdk::vec![&env, env.current_contract_address(), market.market_id.clone(), bettor.clone(), soroban_sdk::IntoVal::into_val(&bet.amount, &env)],
+            soroban_sdk::vec![
+                &env,
+                env.current_contract_address().into_val(&env),
+                market.market_id.clone().into_val(&env),
+                bettor.clone().into_val(&env),
+                bet.amount.into_val(&env),
+            ],
         );
 
         env.events().publish(
