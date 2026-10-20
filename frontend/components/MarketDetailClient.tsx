@@ -12,6 +12,7 @@ import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { DisputeModal } from "@/components/DisputeModal";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { truncateAddress, stellarExpertContractUrl } from "@/lib/stellar";
 
 // recharts is only needed on this page; keep it out of the shared bundle
 const OutcomeChart = dynamic(() => import("@/components/OutcomeChart").then((m) => m.OutcomeChart), {
@@ -65,9 +66,11 @@ export function MarketDetailClient({
   const { addToast } = useToast();
   const [justPlaced, setJustPlaced] = useState<Bet[]>([]);
   const [showDispute, setShowDispute] = useState(false);
+  const [copiedContract, setCopiedContract] = useState(false);
 
   // Use live polled data once available, fall back to SSR initial data
   const m = market ?? initialMarket;
+  const contractAddress = m.contractAddress || m.id;
   const oddsHistory = initialOddsHistory;
 
   const polledBets = liveBets.length ? liveBets : initialBets;
@@ -80,6 +83,18 @@ export function MarketDetailClient({
   const total = poolA + poolB;
   const oddsA = total === BigInt(0) ? 50 : Number((poolA * BigInt(100)) / total);
   const oddsB = 100 - oddsA;
+
+  const handleCopyContract = useCallback(async () => {
+    if (!contractAddress) return;
+    try {
+      await navigator.clipboard.writeText(contractAddress);
+      setCopiedContract(true);
+      addToast("Contract address copied to clipboard!", "success");
+      setTimeout(() => setCopiedContract(false), 2000);
+    } catch {
+      addToast("Could not copy contract address.", "error");
+    }
+  }, [contractAddress, addToast]);
 
   const handleShare = useCallback(async () => {
     const url = window.location.href;
@@ -112,6 +127,82 @@ export function MarketDetailClient({
           {m.fighterA.name} vs {m.fighterB.name}
         </h1>
         <MarketStatusBadge status={m.status} />
+
+        {/* Contract Address & Explorer Link */}
+        {contractAddress && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-1 text-xs text-gray-300">
+            <span className="text-gray-400 font-medium">Contract:</span>
+            <span className="font-mono text-gray-200" title={contractAddress}>
+              {truncateAddress(contractAddress)}
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyContract}
+              aria-label={copiedContract ? "Contract address copied" : "Copy contract address to clipboard"}
+              className="p-1 text-gray-400 hover:text-white transition-colors rounded hover:bg-gray-800"
+              title={copiedContract ? "Copied" : "Copy address"}
+            >
+              {copiedContract ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-3.5 w-3.5 text-green-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              )}
+            </button>
+            <span className="sr-only" role="status" aria-live="polite">
+              {copiedContract ? "Copied contract address to clipboard" : ""}
+            </span>
+            <a
+              href={stellarExpertContractUrl(contractAddress)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View contract on Stellar Expert (opens in new tab)"
+              className="p-1 text-gray-400 hover:text-amber-400 transition-colors rounded hover:bg-gray-800"
+              title="View on Stellar Expert"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          </div>
+        )}
         <button
           onClick={handleShare}
           aria-label="Share this market"
