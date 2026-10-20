@@ -11,8 +11,35 @@ import { RouteAnnouncer } from '@/components/RouteAnnouncer';
 import '@/app/globals.css';
 
 export const metadata: Metadata = {
-  title: 'BOXMEOUT — Boxing Prediction Market',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'BOXMEOUT — Boxing Prediction Market',
+    template: '%s | BOXMEOUT',
+  },
   description: 'Decentralized boxing prediction market on Stellar',
+  applicationName: 'BOXMEOUT',
+  keywords: ['boxing', 'prediction market', 'Stellar', 'Soroban', 'XLM', 'crypto betting'],
+  authors: [{ name: 'BOXMEOUT' }],
+  creator: 'BOXMEOUT',
+  publisher: 'BOXMEOUT',
+  manifest: '/manifest.webmanifest',
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: SITE_URL,
+    siteName: 'BOXMEOUT',
+    title: 'BOXMEOUT — Boxing Prediction Market',
+    description: 'Decentralized boxing prediction market on Stellar',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'BOXMEOUT — Boxing Prediction Market',
+    description: 'Decentralized boxing prediction market on Stellar',
+  },
 };
 
 export default function RootLayout({
