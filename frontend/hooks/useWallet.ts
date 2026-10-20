@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  createElement,
   createContext,
   createElement,
   useCallback,
@@ -190,7 +191,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       result = await freighterSignTransaction(xdr, {
         networkPassphrase: NETWORK_PASSPHRASE,
-        address,
+        address: state.address,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
