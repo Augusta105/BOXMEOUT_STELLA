@@ -13,6 +13,7 @@ import { BetForm } from "@/components/BetForm";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { DisputeModal } from "@/components/DisputeModal";
+import { useWallet } from "@/hooks/useWallet";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { truncateAddress, stellarExpertContractUrl } from "@/lib/stellar";
 
@@ -66,6 +67,7 @@ export function MarketDetailClient({
   const { market } = useMarket(marketId);
   const { bets: liveBets } = useMarketBets(marketId);
   const { addToast } = useToast();
+  const { address } = useWallet();
   const [justPlaced, setJustPlaced] = useState<Bet[]>([]);
   const [showDispute, setShowDispute] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
@@ -325,7 +327,13 @@ export function MarketDetailClient({
       )}
 
       {showDispute && (
-        <DisputeModal market={m} onDisputed={() => setShowDispute(false)} />
+        <DisputeModal
+          market={m}
+          userBets={userBets}
+          isOpen={showDispute}
+          onDisputed={() => setShowDispute(false)}
+          onClose={() => setShowDispute(false)}
+        />
       )}
     </div>
   );
